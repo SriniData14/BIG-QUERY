@@ -1,0 +1,80 @@
+-- Step 1: Create a sales table with partitioning (on sale_date) and clustering (on customer_id)
+CREATE OR REPLACE TABLE `your_project.sales_dataset.sales_data`
+PARTITION BY DATE(sale_date)
+CLUSTER BY customer_id
+AS
+SELECT
+  order_id,
+  customer_id,
+  product_id,
+  product_category,
+  sale_date,
+  quantity,
+  price_per_unit,
+  quantity * price_per_unit AS total_amount,
+  region,
+  payment_method
+FROM
+  `your_project.sales_dataset.raw_sales_data`;
+
+-- Step 2: Data cleaning - Create a clean view/table
+CREATE OR REPLACE VIEW `your_project.sales_dataset.cleaned_sales_data` AS
+SELECT
+  order_id,
+  customer_id,
+  product_id,
+  product_category,
+  SAFE_CAST(sale_date AS DATE) AS sale_date,
+  quantity,
+  price_per_unit,
+  total_amount,
+  region,
+  COALESCE(payment_method, 'Unknown') AS payment_method
+FROM
+  `your_project.sales_dataset.sales_data`
+WHERE
+  quantity > 0
+  AND price_per_unit IS NOT NULL;
+
+-- Step 3: Monthly Sales Summary Report
+CREATE OR REPLACE TABLE `your_project.sales_dataset.monthly_sales_summary` AS
+SELECT
+  EXTRACT(YEAR FROM sale_date) AS sale_year,
+  EXTRACT(MONTH FROM sale_date) AS sale_month,
+  SUM(total_amount) AS total_revenue,
+  COUNT(DISTINCT customer_id) AS unique_customers,
+  COUNT(order_id) AS total_orders,
+  AVG(total_amount) AS avg_order_value
+FROM
+  `your_project.sales_dataset.cleaned_sales_data`
+GROUP BY
+  sale_year, sale_month
+ORDER BY
+  sale_year, sale_month;
+
+-- Step 4: Top 5 Product Categories by Revenue
+CREATE OR REPLACE VIEW `your_project.sales_dataset.top_product_categories` AS
+SELECT
+  product_category,
+  SUM(total_amount) AS category_revenue
+FROM
+  `your_project.sales_dataset.cleaned_sales_data`
+GROUP BY
+  product_category
+ORDER BY
+  category_revenue DESC
+LIMIT 5;
+
+-- Step 5: Region-wise Sales Analysis
+CREATE OR REPLACE TABLE `your_project.sales_dataset.region_sales_summary` AS
+SELECT
+  region,
+  SUM(total_amount) AS total_revenue,
+  COUNT(DISTINCT customer_id) AS unique_customers,
+  COUNT(order_id) AS total_orders
+FROM
+  `your_project.sales_dataset.cleaned_sales_data`
+GROUP BY
+  region
+ORDER BY
+  total_revenue DESC;
